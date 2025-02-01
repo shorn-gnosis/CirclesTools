@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Circles Checker (v1 & v2)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Inter', Helvetica, Arial, sans-serif;
+      background: #ffffff;
+      color: #333;
+      line-height: 1.3; /* Slightly tighter line-height */
+    }
+
+    header {
+      background: #5C49E4; /* A Circles-like purple accent */
+      color: #fff;
+      padding: 20px;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-weight: 600;
+      font-size: 1.5rem;
+    }
+
+    p {
+      margin: 0.5rem 0 0;
+      font-weight: 400;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+
+    input {
+      padding: 10px;
+      width: 100%;
+      max-width: 400px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 1rem;
+    }
+
+    button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      background: #5C49E4;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+    button:hover {
+      background: #4A39CC;
+    }
+
+    #result {
+      margin-top: 20px;
+      padding: 20px;
+      border-radius: 8px;
+      background: #fafafa;
+      border: 1px solid #eee;
+      min-height: 200px;
+    }
+
+    .info {
+      margin: 0.3rem 0; /* Slightly less vertical spacing */
+      line-height: 1.3; 
+    }
+
+    .address-link {
+      color: #5C49E4;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .address-link:hover {
+      text-decoration: underline;
+    }
+
+    table {
+      border-collapse: collapse;
+      margin-top: 10px;
+      width: 100%;
+      font-size: 0.95rem;
+      background: #fff;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #eee;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 10px;
+      white-space: nowrap; /* Prevent ugly line break for Expiry date */
+    }
+
+    th {
+      background: #f9f9fc;
+      font-weight: 600;
+      border-bottom: 1px solid #eee;
+    }
+
+    tr:nth-child(even) {
+      background: #fafafa;
+    }
+
+    tr:hover td {
+      background: #f3f3f7;
+    }
+
+    td {
+      border-bottom: 1px solid #eee;
+    }
+
+    strong {
+      font-weight: 600;
+    }
+
+    /* Loader Styles */
+    .loader {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #5C49E4;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 10px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Circles Checker (v1 & v2)</h1>
+    <p>Check an address to see Circles v1 & v2 status and trusted addresses.</p>
+  </header>
+
+  <div class="container">
+    <label for="addressInput">Address:</label>
+    <input type="text" id="addressInput" value="0x42cEDde51198D1773590311E2A340DC06B24cB37" />
+    <button id="checkButton">Check Address</button>
+
+    <div id="result"></div>
+  </div>
+
+  <!-- Ethers.js UMD build -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script>
+    // Helper Contract ABI
+    const helperABI = [
+      "function getAllDataForUser(address user) external view returns (tuple(bool isOrg, bool isHuman, uint256 totalSupply, bool stopped, uint256 lastTouched) v1Data, tuple(bool isHuman, bool isOrg, bool isGroup, uint256 crcAmount, uint256 ts1, uint256 ts2, uint256 totalSupply) v2Data, tuple(address trustedAddress, uint256 expiry, bool v1Org, bool v1Human, bool v2Human, bool v2Org, bool v2Group, uint256 v2TotalSupply, uint256 userHolds)[] trustedAddresses)"
+    ];
+
+    // Helper Contract Address on Gnosis
+    const helperAddress = "0xD5934724C19f9DbEeBC263066D627872e55e63Aa";
+
+    // Initialize Ethers.js Provider
+    const provider = new ethers.providers.JsonRpcProvider("https://rpc.ankr.com/gnosis");
+
+    // Initialize Helper Contract
+    const helperContract = new ethers.Contract(helperAddress, helperABI, provider);
+
+    const checkButton = document.getElementById("checkButton");
+    const resultDiv = document.getElementById("result");
+    const addressInput = document.getElementById("addressInput");
+
+    // Helper Functions
+    function relativeTimeSince(timestamp) {
+      const now = Date.now();
+      const diffMs = now - (timestamp * 1000);
+      if (diffMs < 0) return "in the future";
+
+      const diffMinutes = Math.floor(diffMs / 60000);
+      const minutes = diffMinutes % 60;
+      const hours = Math.floor(diffMinutes / 60);
+      
+      let result = "";
+      if (hours > 0) {
+        result += hours + "h ";
+      }
+      result += minutes + "m ago";
+      return result.trim();
+    }
+
+    function formatExpiry(expiry) {
+      const indefiniteVal = ethers.BigNumber.from("79228162514264337593543950335");
+      if (ethers.BigNumber.from(expiry).eq(indefiniteVal)) {
+        return "indefinite";
+      }
+
+      const expiryNum = Number(expiry);
+      const date = new Date(expiryNum * 1000);
+      if (isNaN(date.getTime())) return "Invalid Date";
+      return date.toUTCString();
+    }
+
+    async function checkAddress(inputAddress) {
+      // Clear previous results
+      resultDiv.innerHTML = "";
+
+      if (!ethers.utils.isAddress(inputAddress)) {
+        resultDiv.innerHTML = "<p style='color:red;'>Invalid address</p>";
+        return;
+      }
+
+      // Show loader
+      const loader = document.createElement("div");
+      loader.className = "loader";
+      const loadingText = document.createElement("span");
+      loadingText.textContent = "Fetching data...";
+      resultDiv.appendChild(loadingText);
+      resultDiv.appendChild(loader);
+
+      try {
+        // Fetch all data using the helper contract
+        const data = await helperContract.getAllDataForUser(inputAddress);
+
+        // Remove loader
+        resultDiv.innerHTML = "";
+
+        const v1Data = data.v1Data;
+        const v2Data = data.v2Data;
+        const trustedAddresses = data.trustedAddresses;
+
+        // Display Address
+        let html = `<div class="info"><strong>Address:</strong> ${inputAddress}</div>`;
+
+        // ----- V1 Info -----
+        html += `<div class="info"><strong>[V1] Status:</strong> ${v1Data.isHuman ? 'human' : (v1Data.isOrg ? 'org' : 'none')}</div>`;
+
+        if (v1Data.isHuman) {
+          html += `<div class="info"><strong>[V1] Total Supply:</strong> ${ethers.utils.formatUnits(v1Data.totalSupply, 18)}</div>`;
+          html += `<div class="info"><strong>[V1] Stopped:</strong> ${v1Data.stopped}</div>`;
+          html += `<div class="info"><strong>[V1] Last Mint:</strong> ${new Date(v1Data.lastTouched * 1000).toLocaleString()}</div>`;
+        }
+
+        // ----- V2 Info -----
+        html += `<div class="info"><strong>[V2] Status:</strong> ${v2Data.isHuman ? 'human' : (v2Data.isOrg ? 'org' : (v2Data.isGroup ? 'group' : 'none'))}</div>`;
+
+        if (v2Data.isHuman || v2Data.isGroup) {
+          html += `<div class="info"><strong>[V2] CRC Amount:</strong> ${ethers.utils.formatUnits(v2Data.crcAmount, 18)}</div>`;
+          html += `<div class="info"><strong>[V2] Last Mint:</strong> ${relativeTimeSince(v2Data.ts1)}</div>`;
+          html += `<div class="info"><strong>[V2] Total Supply:</strong> ${ethers.utils.formatUnits(v2Data.totalSupply, 18)}</div>`;
+        }
+
+        // ----- Trusted Addresses -----
+        if (trustedAddresses.length > 0) {
+          html += `<div class="info"><strong>[V2] Trusted Addresses:</strong></div>`;
+          html += `
+            <table>
+              <thead>
+                <tr>
+                  <th>Trusted Address</th>
+                  <th>Expiry</th>
+                  <th>V1 State</th>
+                  <th>V2 State</th>
+                  <th>V2 Total Supply</th>
+                  <th>User Holds</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+
+          trustedAddresses.forEach(addrData => {
+            const v1State = addrData.v1Human ? 'human' : (addrData.v1Org ? 'org' : 'none');
+            const v2State = addrData.v2Human ? 'human' : (addrData.v2Org ? 'org' : (addrData.v2Group ? 'group' : 'none'));
+            const v2TotalSupply = addrData.v2TotalSupply !== 0 ? ethers.utils.formatUnits(addrData.v2TotalSupply, 18) : '-';
+            const userHolds = ethers.utils.formatUnits(addrData.userHolds, 18);
+            const expiryDisplay = formatExpiry(addrData.expiry);
+
+            html += `
+              <tr>
+                <td><span class="address-link" data-address="${addrData.trustedAddress}">${addrData.trustedAddress}</span></td>
+                <td>${expiryDisplay}</td>
+                <td>${v1State}</td>
+                <td>${v2State}</td>
+                <td>${v2TotalSupply}</td>
+                <td>${userHolds}</td>
+              </tr>
+            `;
+          });
+
+          html += `</tbody></table>`;
+        } else {
+          html += `<div class="info">[V2] No trusted addresses found.</div>`;
+        }
+
+        // Display all data
+        resultDiv.innerHTML = html;
+
+      } catch (error) {
+        console.error(error);
+        resultDiv.innerHTML = `<p style='color:red;'>Error: ${error.message}</p>`;
+      }
+    }
+
+    checkButton.addEventListener("click", async () => {
+      const addr = addressInput.value.trim();
+      await checkAddress(addr);
+    });
+
+    resultDiv.addEventListener("click", async (e) => {
+      if (e.target.classList.contains("address-link")) {
+        const addr = e.target.getAttribute("data-address");
+        addressInput.value = addr;
+        await checkAddress(addr);
+      }
+    });
+  </script>
+</body>
+</html>
