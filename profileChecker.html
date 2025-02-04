@@ -11,39 +11,33 @@
       font-family: 'Inter', Helvetica, Arial, sans-serif;
       background: #ffffff;
       color: #333;
-      line-height: 1.3; /* Slightly tighter line-height */
+      line-height: 1.3;
     }
-
     header {
-      background: #5C49E4; /* A Circles-like purple accent */
+      background: #5C49E4;
       color: #fff;
       padding: 20px;
       text-align: center;
     }
-
     h1 {
       margin: 0;
       font-weight: 600;
       font-size: 1.5rem;
     }
-
     p {
       margin: 0.5rem 0 0;
       font-weight: 400;
     }
-
     .container {
       max-width: 800px;
       margin: 40px auto;
       padding: 0 20px;
     }
-
     label {
       display: block;
       margin-bottom: 0.5rem;
       font-weight: 600;
     }
-
     input {
       padding: 10px;
       width: 100%;
@@ -52,7 +46,6 @@
       border-radius: 4px;
       font-size: 1rem;
     }
-
     button {
       margin-top: 10px;
       padding: 10px 20px;
@@ -67,7 +60,6 @@
     button:hover {
       background: #4A39CC;
     }
-
     #result {
       margin-top: 20px;
       padding: 20px;
@@ -76,21 +68,19 @@
       border: 1px solid #eee;
       min-height: 200px;
     }
-
     .info {
-      margin: 0.3rem 0; /* Slightly less vertical spacing */
-      line-height: 1.3; 
+      margin: 0.3rem 0;
+      line-height: 1.3;
     }
-
     .address-link {
       color: #5C49E4;
       text-decoration: none;
       font-weight: 500;
+      cursor: pointer;
     }
     .address-link:hover {
       text-decoration: underline;
     }
-
     table {
       border-collapse: collapse;
       margin-top: 10px;
@@ -101,36 +91,28 @@
       overflow: hidden;
       border: 1px solid #eee;
     }
-
     th, td {
       text-align: left;
       padding: 10px;
-      white-space: nowrap; /* Prevent ugly line break for Expiry date */
+      white-space: nowrap;
     }
-
     th {
       background: #f9f9fc;
       font-weight: 600;
       border-bottom: 1px solid #eee;
     }
-
     tr:nth-child(even) {
       background: #fafafa;
     }
-
     tr:hover td {
       background: #f3f3f7;
     }
-
     td {
       border-bottom: 1px solid #eee;
     }
-
     strong {
       font-weight: 600;
     }
-
-    /* Loader Styles */
     .loader {
       border: 4px solid #f3f3f3;
       border-top: 4px solid #5C49E4;
@@ -142,7 +124,6 @@
       vertical-align: middle;
       margin-left: 10px;
     }
-
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
@@ -159,7 +140,6 @@
     <label for="addressInput">Address:</label>
     <input type="text" id="addressInput" value="0x42cEDde51198D1773590311E2A340DC06B24cB37" />
     <button id="checkButton">Check Address</button>
-
     <div id="result"></div>
   </div>
 
@@ -184,16 +164,44 @@
     const resultDiv = document.getElementById("result");
     const addressInput = document.getElementById("addressInput");
 
-    // Helper Functions
+    // ------------------------------
+    // Modified helper function to fetch a profile name for an address.
+    // This version expects the API to return an array with objects that contain a "name" property.
+    async function getProfileName(address) {
+      try {
+        console.log("Fetching profile for address:", address);
+        const queryAddress = address.toLowerCase();
+        const url = `https://rpc.aboutcircles.com/profiles/search?address=${queryAddress}`;
+        console.log("Request URL:", url);
+        const response = await fetch(url);
+        if (!response.ok) {
+          console.error("HTTP error", response.status, response.statusText);
+          return "No name";
+        }
+        const data = await response.json();
+        console.log("Profile response for", address, data);
+        // Check if data is an array and find the exact address match
+        if (Array.isArray(data)) {
+          const profile = data.find(entry => 
+            entry.address.toLowerCase() === queryAddress
+          );
+          return profile?.name || "No name";
+        }
+        return "No name";
+      } catch (error) {
+        console.error("Error fetching profile for", address, error);
+        return "No name";
+      }
+    }
+
+    // Helper Functions for formatting
     function relativeTimeSince(timestamp) {
       const now = Date.now();
       const diffMs = now - (timestamp * 1000);
       if (diffMs < 0) return "in the future";
-
       const diffMinutes = Math.floor(diffMs / 60000);
       const minutes = diffMinutes % 60;
       const hours = Math.floor(diffMinutes / 60);
-      
       let result = "";
       if (hours > 0) {
         result += hours + "h ";
@@ -207,7 +215,6 @@
       if (ethers.BigNumber.from(expiry).eq(indefiniteVal)) {
         return "indefinite";
       }
-
       const expiryNum = Number(expiry);
       const date = new Date(expiryNum * 1000);
       if (isNaN(date.getTime())) return "Invalid Date";
@@ -232,7 +239,7 @@
       resultDiv.appendChild(loader);
 
       try {
-        // Fetch all data using the helper contract
+        // Fetch on-chain data via the helper contract
         const data = await helperContract.getAllDataForUser(inputAddress);
 
         // Remove loader
@@ -242,12 +249,12 @@
         const v2Data = data.v2Data;
         const trustedAddresses = data.trustedAddresses;
 
-        // Display Address
-        let html = `<div class="info"><strong>Address:</strong> ${inputAddress}</div>`;
+        // Replace the main address with its profile name
+        const mainDisplayName = await getProfileName(inputAddress);
+        let html = `<div class="info"><strong>Address:</strong> ${mainDisplayName}</div>`;
 
         // ----- V1 Info -----
         html += `<div class="info"><strong>[V1] Status:</strong> ${v1Data.isHuman ? 'human' : (v1Data.isOrg ? 'org' : 'none')}</div>`;
-
         if (v1Data.isHuman) {
           html += `<div class="info"><strong>[V1] Total Supply:</strong> ${ethers.utils.formatUnits(v1Data.totalSupply, 18)}</div>`;
           html += `<div class="info"><strong>[V1] Stopped:</strong> ${v1Data.stopped}</div>`;
@@ -256,7 +263,6 @@
 
         // ----- V2 Info -----
         html += `<div class="info"><strong>[V2] Status:</strong> ${v2Data.isHuman ? 'human' : (v2Data.isOrg ? 'org' : (v2Data.isGroup ? 'group' : 'none'))}</div>`;
-
         if (v2Data.isHuman || v2Data.isGroup) {
           html += `<div class="info"><strong>[V2] CRC Amount:</strong> ${ethers.utils.formatUnits(v2Data.crcAmount, 18)}</div>`;
           html += `<div class="info"><strong>[V2] Last Mint:</strong> ${relativeTimeSince(v2Data.ts1)}</div>`;
@@ -271,6 +277,7 @@
               <thead>
                 <tr>
                   <th>Trusted Address</th>
+                  <th>Name</th>
                   <th>Expiry</th>
                   <th>V1 State</th>
                   <th>V2 State</th>
@@ -280,7 +287,6 @@
               </thead>
               <tbody>
           `;
-
           trustedAddresses.forEach(addrData => {
             const v1State = addrData.v1Human ? 'human' : (addrData.v1Org ? 'org' : 'none');
             const v2State = addrData.v2Human ? 'human' : (addrData.v2Org ? 'org' : (addrData.v2Group ? 'group' : 'none'));
@@ -290,7 +296,16 @@
 
             html += `
               <tr>
-                <td><span class="address-link" data-address="${addrData.trustedAddress}">${addrData.trustedAddress}</span></td>
+                <td>
+                  <span class="address-link" data-address="${addrData.trustedAddress}">
+                    ${addrData.trustedAddress}
+                  </span>
+                </td>
+                <td>
+                  <span class="address-name" data-address="${addrData.trustedAddress}">
+                    Loading...
+                  </span>
+                </td>
                 <td>${expiryDisplay}</td>
                 <td>${v1State}</td>
                 <td>${v2State}</td>
@@ -299,15 +314,21 @@
               </tr>
             `;
           });
-
           html += `</tbody></table>`;
         } else {
           html += `<div class="info">[V2] No trusted addresses found.</div>`;
         }
 
-        // Display all data
+        // Update the result div
         resultDiv.innerHTML = html;
 
+        // --- Update each "Name" cell for trusted addresses ---
+        const nameCells = document.querySelectorAll(".address-name");
+        for (const cell of nameCells) {
+          const addr = cell.getAttribute("data-address");
+          const profileName = await getProfileName(addr);
+          cell.textContent = profileName;
+        }
       } catch (error) {
         console.error(error);
         resultDiv.innerHTML = `<p style='color:red;'>Error: ${error.message}</p>`;
@@ -319,6 +340,7 @@
       await checkAddress(addr);
     });
 
+    // When clicking on a displayed address (raw address), re-check that address.
     resultDiv.addEventListener("click", async (e) => {
       if (e.target.classList.contains("address-link")) {
         const addr = e.target.getAttribute("data-address");
