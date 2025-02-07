@@ -55,7 +55,7 @@
     button:hover {
       background: #4A39CC;
     }
-    #status, #groupStatus, #updateStatus {
+    #groupStatus, #updateStatus, #memberStatus {
       text-align: center;
       margin-top: 10px;
       font-size: 14px;
@@ -97,48 +97,54 @@
       
       <div class="update-field">
         <h3>Set Service Address</h3>
-        <label for="newService">New Service Address:</label>
         <input type="text" id="newService" placeholder="0x..." />
         <button id="setService">Update Service</button>
       </div>
 
       <div class="update-field">
         <h3>Set Mint Handler</h3>
-        <label for="newMintHandler">New Mint Handler Address:</label>
         <input type="text" id="newMintHandler" placeholder="0x..." />
         <button id="setMintHandler">Update Mint Handler</button>
       </div>
 
       <div class="update-field">
         <h3>Set Redemption Handler</h3>
-        <label for="newRedemptionHandler">New Redemption Handler Address:</label>
         <input type="text" id="newRedemptionHandler" placeholder="0x..." />
         <button id="setRedemptionHandler">Update Redemption Handler</button>
       </div>
 
       <div class="update-field">
         <h3>Set Minimal Deposit</h3>
-        <label for="newMinimalDeposit">New Minimal Deposit (wei):</label>
         <input type="number" id="newMinimalDeposit" placeholder="Amount in wei" />
         <button id="setMinimalDeposit">Update Minimal Deposit</button>
       </div>
 
       <div class="update-field">
         <h3>Set Fee Collection Address</h3>
-        <label for="newFeeCollection">New Fee Collection Address:</label>
         <input type="text" id="newFeeCollection" placeholder="0x..." />
         <button id="setFeeCollection">Update Fee Collection</button>
       </div>
 
       <div id="updateStatus"></div>
     </div>
+
+    <!-- New section to add a member to the group -->
+    <div class="section" id="memberSection" style="display: none;">
+      <h2>Add Member</h2>
+      <label for="newMember">Member Address:</label>
+      <input type="text" id="newMember" placeholder="0x..." />
+      <label for="newExpiry">Expiry (UNIX timestamp):</label>
+      <input type="number" id="newExpiry" placeholder="e.g. 1700000000" />
+      <button id="addMember">Add Member</button>
+      <div id="memberStatus"></div>
+    </div>
   </div>
 
   <script>
-    // Global variables for provider, signer, and group contract instance.
+    // Global variables for provider, signer, and the group contract instance.
     let provider, signer, groupContract;
-
-    // ABI for the group contract (owner, view functions and update functions)
+    
+    // ABI for the group contract with view functions, update functions, and the trust() function for adding members.
     const groupABI = [
       "function owner() external view returns (address)",
       "function service() external view returns (address)",
@@ -150,10 +156,11 @@
       "function setMintHandler(address _mintHandler) external",
       "function setRedemptionHandler(address _redemptionHandler) external",
       "function setMinimalDeposit(uint256 _minimalDeposit) external",
-      "function setFeeCollection(address _feeCollection) external"
+      "function setFeeCollection(address _feeCollection) external",
+      "function trust(address _trustReceiver, uint96 _expiry) external"
     ];
 
-    // Initialize provider and signer using window.ethereum (if available)
+    // Initialize provider and signer using window.ethereum.
     async function init() {
       if (typeof window.ethereum === 'undefined') {
         document.getElementById("groupStatus").innerText = 
@@ -166,7 +173,7 @@
       signer = provider.getSigner();
     }
 
-    // Load and display group contract details
+    // Load and display group contract details.
     async function loadGroupDetails() {
       const address = document.getElementById("groupAddress").value.trim();
       if (!ethers.utils.isAddress(address)) {
@@ -191,13 +198,14 @@
         document.getElementById("groupStatus").innerText = "Group loaded successfully.";
         document.getElementById("groupDetails").style.display = "block";
         document.getElementById("updateSection").style.display = "block";
+        document.getElementById("memberSection").style.display = "block";
       } catch (error) {
         console.error(error);
         document.getElementById("groupStatus").innerText = "Error loading group details: " + error.message;
       }
     }
 
-    // Generic function to update a field on the group contract
+    // Generic function to update a field on the group contract.
     async function updateField(fieldName, newValue) {
       if (!groupContract) return;
       let tx;
@@ -224,21 +232,43 @@
         document.getElementById("updateStatus").innerText = `Transaction submitted: ${tx.hash}`;
         await tx.wait();
         document.getElementById("updateStatus").innerText = `Update successful! Tx hash: ${tx.hash}`;
-        loadGroupDetails(); // Refresh details after update
+        loadGroupDetails(); // Refresh displayed details
       } catch (error) {
         console.error(error);
         document.getElementById("updateStatus").innerText = "Error: " + error.message;
       }
     }
 
-    // Set up event listeners once the DOM is loaded
+    // Function to add a member using the trust() function.
+    async function addMember() {
+      if (!groupContract) return;
+      const newMember = document.getElementById("newMember").value.trim();
+      const newExpiry = document.getElementById("newExpiry").value.trim();
+      if (!ethers.utils.isAddress(newMember)) {
+        alert("Invalid member address.");
+        return;
+      }
+      if (!newExpiry || isNaN(newExpiry)) {
+        alert("Invalid expiry. Please enter a valid UNIX timestamp.");
+        return;
+      }
+      try {
+        const tx = await groupContract.trust(newMember, newExpiry);
+        document.getElementById("memberStatus").innerText = `Transaction submitted: ${tx.hash}`;
+        await tx.wait();
+        document.getElementById("memberStatus").innerText = `Member added successfully! Tx hash: ${tx.hash}`;
+      } catch (error) {
+        console.error(error);
+        document.getElementById("memberStatus").innerText = "Error: " + error.message;
+      }
+    }
+
+    // Set up event listeners once the DOM is loaded.
     window.addEventListener("DOMContentLoaded", async () => {
       await init();
-      // Wire up load/refresh buttons
       document.getElementById("loadGroup").addEventListener("click", loadGroupDetails);
       document.getElementById("refreshGroup").addEventListener("click", loadGroupDetails);
 
-      // Update buttons with validation
       document.getElementById("setService").addEventListener("click", () => {
         const newService = document.getElementById("newService").value.trim();
         if (ethers.utils.isAddress(newService)) {
@@ -279,6 +309,7 @@
           alert("Invalid fee collection address.");
         }
       });
+      document.getElementById("addMember").addEventListener("click", addMember);
     });
   </script>
 </body>
