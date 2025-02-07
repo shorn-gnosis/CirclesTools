@@ -52,7 +52,7 @@
     button:hover {
       background: #4A39CC;
     }
-    #status, #groupStatus, #memberStatus, #updateStatus {
+    #groupStatus, #memberStatus, #removeStatus, #updateStatus, #status {
       text-align: center;
       margin-top: 10px;
       font-size: 14px;
@@ -88,7 +88,7 @@
       <button id="refreshGroup">Refresh Details</button>
     </div>
     
-    <!-- Section 3: Add Member(s) (batch trust) -->
+    <!-- Section 3: Add Member(s) -->
     <div class="section" id="memberSection" style="display: none;">
       <h2>Add Member(s)</h2>
       <label for="members">Member Address(es) (comma separated):</label>
@@ -99,7 +99,16 @@
       <div id="memberStatus"></div>
     </div>
     
-    <!-- Section 4: Update Group Admin Settings -->
+    <!-- Section 4: Remove Trust (Remove Member(s)) -->
+    <div class="section" id="removeSection" style="display: none;">
+      <h2>Remove Trust (Remove Member(s))</h2>
+      <label for="removeMembers">Member Address(es) (comma separated):</label>
+      <input type="text" id="removeMembers" placeholder="0x..., 0x..., ..." />
+      <button id="removeMembersBtn">Remove Trust</button>
+      <div id="removeStatus"></div>
+    </div>
+    
+    <!-- Section 5: Update Group Admin Settings -->
     <div class="section" id="updateSection" style="display: none;">
       <h2>Update Group Settings</h2>
       
@@ -136,7 +145,6 @@
       <div id="updateStatus"></div>
     </div>
     
-    <!-- General Status Message -->
     <div id="status"></div>
   </div>
   
@@ -144,7 +152,7 @@
     // Global variables for provider, signer, and the group contract instance.
     let provider, signer, groupContract;
     
-    // ABI for the group contract. Note that trustBatch is used to add multiple members.
+    // ABI for the group contract (includes trustBatch for batch trust/untrust).
     const groupABI = [
       "function owner() external view returns (address)",
       "function service() external view returns (address)",
@@ -196,9 +204,10 @@
         document.getElementById("feeCollection").innerText = feeCollection;
         document.getElementById("groupStatus").innerText = "Group loaded successfully.";
     
-        // Reveal the details, add-member, and update sections.
+        // Reveal the group details, add-member, remove-member, and update sections.
         document.getElementById("groupDetails").style.display = "block";
         document.getElementById("memberSection").style.display = "block";
+        document.getElementById("removeSection").style.display = "block";
         document.getElementById("updateSection").style.display = "block";
       } catch (error) {
         console.error(error);
@@ -240,7 +249,7 @@
       }
     }
     
-    // Function to add one or more members using trustBatch.
+    // Function to add one or more members using trustBatch with a non-zero expiry.
     async function addMembers() {
       if (!groupContract) return;
       let inputStr = document.getElementById("members").value.trim();
@@ -248,7 +257,7 @@
         alert("Please enter one or more member addresses.");
         return;
       }
-      // Split input by commas and filter out invalid addresses.
+      // Split the input by commas and filter for valid addresses.
       let addresses = inputStr.split(",")
                         .map(addr => addr.trim())
                         .filter(addr => ethers.utils.isAddress(addr));
@@ -271,12 +280,43 @@
       }
     }
     
-    // Set up event listeners after DOM is loaded.
+    // Function to remove trust for one or more members using trustBatch with expiry set to 0.
+    async function removeMembers() {
+      if (!groupContract) return;
+      let inputStr = document.getElementById("removeMembers").value.trim();
+      if (!inputStr) {
+        alert("Please enter one or more member addresses to remove trust.");
+        return;
+      }
+      // Split the input by commas and filter for valid addresses.
+      let addresses = inputStr.split(",")
+                        .map(addr => addr.trim())
+                        .filter(addr => ethers.utils.isAddress(addr));
+      if (addresses.length === 0) {
+        document.getElementById("removeStatus").innerText = "No valid member addresses found.";
+        return;
+      }
+      try {
+        // Set expiry to 0 to remove trust.
+        const tx = await groupContract.trustBatch(addresses, 0);
+        document.getElementById("removeStatus").innerText = `Transaction submitted: ${tx.hash}\nWaiting for confirmation...`;
+        await tx.wait();
+        document.getElementById("removeStatus").innerText = `Trust removed successfully for provided addresses! Tx hash: ${tx.hash}`;
+      } catch (error) {
+        console.error(error);
+        document.getElementById("removeStatus").innerText = "Error: " + error.message;
+      }
+    }
+    
+    // Set up event listeners once the DOM is loaded.
     window.addEventListener("DOMContentLoaded", async () => {
       await init();
+      
+      // Load group and refresh details.
       document.getElementById("loadGroup").addEventListener("click", loadGroupDetails);
       document.getElementById("refreshGroup").addEventListener("click", loadGroupDetails);
       
+      // Update group settings event listeners.
       document.getElementById("setService").addEventListener("click", () => {
         const newService = document.getElementById("newService").value.trim();
         if (ethers.utils.isAddress(newService)) {
@@ -285,6 +325,7 @@
           alert("Invalid service address.");
         }
       });
+      
       document.getElementById("setMintHandler").addEventListener("click", () => {
         const newMintHandler = document.getElementById("newMintHandler").value.trim();
         if (ethers.utils.isAddress(newMintHandler)) {
@@ -293,6 +334,7 @@
           alert("Invalid mint handler address.");
         }
       });
+      
       document.getElementById("setRedemptionHandler").addEventListener("click", () => {
         const newRedemptionHandler = document.getElementById("newRedemptionHandler").value.trim();
         if (ethers.utils.isAddress(newRedemptionHandler)) {
@@ -301,6 +343,7 @@
           alert("Invalid redemption handler address.");
         }
       });
+      
       document.getElementById("setMinimalDeposit").addEventListener("click", () => {
         const newMinimalDeposit = document.getElementById("newMinimalDeposit").value.trim();
         if (newMinimalDeposit && !isNaN(newMinimalDeposit)) {
@@ -309,6 +352,7 @@
           alert("Invalid minimal deposit value.");
         }
       });
+      
       document.getElementById("setFeeCollection").addEventListener("click", () => {
         const newFeeCollection = document.getElementById("newFeeCollection").value.trim();
         if (ethers.utils.isAddress(newFeeCollection)) {
@@ -317,7 +361,10 @@
           alert("Invalid fee collection address.");
         }
       });
+      
+      // Add member(s) and remove trust event listeners.
       document.getElementById("addMembersBtn").addEventListener("click", addMembers);
+      document.getElementById("removeMembersBtn").addEventListener("click", removeMembers);
     });
   </script>
 </body>
