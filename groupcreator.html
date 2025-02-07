@@ -1,10 +1,10 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Gnosis Safe Group Creator</title>
+  <!-- Load ethers.js from a CDN -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <style>
     body {
@@ -15,12 +15,14 @@
     }
     h1 {
       color: #333;
+      text-align: center;
     }
     form {
       background: #fff;
       padding: 20px;
       border-radius: 8px;
       max-width: 500px;
+      margin: 20px auto;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
     label {
@@ -35,6 +37,7 @@
       box-sizing: border-box;
       border: 1px solid #ccc;
       border-radius: 4px;
+      font-size: 1rem;
     }
     button {
       margin-top: 20px;
@@ -45,6 +48,8 @@
       border: none;
       border-radius: 4px;
       cursor: pointer;
+      display: block;
+      width: 100%;
     }
     button:hover {
       background: #4A39CC;
@@ -53,6 +58,8 @@
       margin-top: 20px;
       font-size: 14px;
       color: #333;
+      text-align: center;
+      white-space: pre-wrap;
     }
   </style>
 </head>
@@ -60,20 +67,20 @@
   <h1>Gnosis Safe Group Creator</h1>
   <form id="createGroupForm">
     <label for="service">Service Address:</label>
-    <!-- Prefilled with the zero address -->
-    <input type="text" id="service" value="0x0000000000000000000000000000000000000000" required />
+    <!-- Will be prefilled with the connected address -->
+    <input type="text" id="service" value="" required />
 
     <label for="conditions">Initial Conditions (comma separated):</label>
     <!-- Leave empty for no initial conditions -->
     <textarea id="conditions" rows="2" placeholder="Optional conditions (comma separated)"></textarea>
 
     <label for="name">Group Name:</label>
-    <!-- Prefilled with "0" as the zero string value -->
-    <input type="text" id="name" value="0" required />
+    <!-- Default group name -->
+    <input type="text" id="name" value="My Group Name" required />
 
     <label for="symbol">Symbol:</label>
-    <!-- Prefilled with "0" as the zero string value -->
-    <input type="text" id="symbol" value="0" required />
+    <!-- Default symbol -->
+    <input type="text" id="symbol" value="SYMBOL" required />
 
     <label for="metadata">Metadata Digest (bytes32 hex):</label>
     <!-- Prefilled with the 32-byte zero value -->
@@ -88,16 +95,20 @@
       // Check for an Ethereum provider (e.g., injected by Gnosis Safe or MetaMask)
       if (typeof window.ethereum === 'undefined') {
         document.getElementById('status').innerText =
-          "No Ethereum provider detected. Please use a Gnosis Safe or install MetaMask.";
+          "No Ethereum provider detected. Please install MetaMask (or a compatible wallet).";
         return;
       }
-
+      
       // Create an ethers provider and signer from the injected provider
       const provider = new ethers.providers.Web3Provider(window.ethereum);
-      await provider.send("eth_requestAccounts", []); // Request account access if needed
+      await provider.send("eth_requestAccounts", []);
       const signer = provider.getSigner();
-
-      // The contract details
+      
+      // Set the service input to the connected (signer's) address
+      const connectedAddress = await signer.getAddress();
+      document.getElementById('service').value = connectedAddress;
+      
+      // Contract details for the group creator
       const contractAddress = "0x55785b41703728f1F1F05E77e22B13c3FCc9ce65";
       const abi = [
         {
@@ -150,10 +161,10 @@
         }
       ];
       
-      // Create a contract instance connected with the signer
+      // Create a contract instance with the signer
       const contract = new ethers.Contract(contractAddress, abi, signer);
       
-      // Handle form submission
+      // Handle the group creation form submission
       document.getElementById('createGroupForm').addEventListener('submit', async (event) => {
         event.preventDefault();
         document.getElementById('status').innerText = "Submitting transaction...";
@@ -184,7 +195,7 @@
           // Call createCMGroup with the provided parameters
           const tx = await contract.createCMGroup(service, initialConditions, name, symbol, metadata);
           document.getElementById('status').innerText =
-            `Transaction submitted. Tx hash: ${tx.hash}. Waiting for confirmation...`;
+            `Transaction submitted. Tx hash: ${tx.hash}\nWaiting for confirmation...`;
           
           // Wait for the transaction to be mined
           await tx.wait();
