@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Core Members Group Info</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+</head>
+<body>
+    <h1>Core Members Group Information</h1>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Group Address</th>
+                <th>Owner</th>
+                <th>Service</th>
+                <th>Mint Handler</th>
+                <th>Redemption Handler</th>
+                <th>Minimal Deposit</th>
+                <th>Fee Collection</th>
+                <th>Static ERC20</th>
+                <th>Static Supply</th>
+                <th>Demurraged ERC20</th>
+                <th>Demurraged Supply</th>
+            </tr>
+        </thead>
+        <tbody id="output"></tbody>
+    </table>
+
+    <script>
+        const RPC_URL = "https://rpc.gnosis.gateway.fm";
+        const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+        const getterContractAddress = "0x684C9090a0Aa32C4109e9BDb1991ABEc946Fd593";
+        const groupAddresses = [
+            "0xdca9d42a96ecf8ede1e6920bec08870bba69600e",
+            "0x81f5c609269b5be123282f282a88282b41f3005e",
+            "0xc164522ebc7e6a8b4b08878cf9e330cfebf4850a",
+            "0x89308E1F7eFD05F7d57548D4b722feB5EA560b49",
+            "0xc9A2bDC6D3b6837C1C6357E1D00232E50268A7B6"
+        ];
+
+        const getterAbi = [
+            "function getGroupsInfo(address[]) view returns (tuple(address owner, address service, address mintHandler, address redemptionHandler, uint256 minimalDeposit, address feeCollection, address staticERC20, address demurragedERC20, uint256 staticTotalSupply, uint256 demurragedTotalSupply)[])"
+        ];
+
+        async function fetchAllGroups() {
+            const output = document.getElementById("output");
+            output.innerHTML = "";
+            
+            try {
+                const getterContract = new ethers.Contract(getterContractAddress, getterAbi, provider);
+                const groupsInfo = await getterContract.getGroupsInfo(groupAddresses);
+                
+                groupsInfo.forEach((info, index) => {
+                    output.innerHTML += `<tr>
+                        <td>${groupAddresses[index]}</td>
+                        <td>${info.owner || "N/A"}</td>
+                        <td>${info.service || "N/A"}</td>
+                        <td>${info.mintHandler || "N/A"}</td>
+                        <td>${info.redemptionHandler || "N/A"}</td>
+                        <td>${ethers.utils.formatEther(info.minimalDeposit || "0")} XDAI</td>
+                        <td>${info.feeCollection || "N/A"}</td>
+                        <td>${info.staticERC20 || "N/A"}</td>
+                        <td>${ethers.utils.formatEther(info.staticTotalSupply || "0")} XDAI</td>
+                        <td>${info.demurragedERC20 || "N/A"}</td>
+                        <td>${ethers.utils.formatEther(info.demurragedTotalSupply || "0")} XDAI</td>
+                    </tr>`;
+                });
+            } catch (error) {
+                output.innerHTML = "Error fetching data: " + error.message;
+            }
+        }
+
+        fetchAllGroups();
+    </script>
+</body>
+</html>
