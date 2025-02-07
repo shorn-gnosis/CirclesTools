@@ -59,6 +59,7 @@
       text-align: center;
       margin-top: 10px;
       font-size: 14px;
+      white-space: pre-wrap;
     }
     .update-field {
       margin-top: 15px;
@@ -128,14 +129,15 @@
       <div id="updateStatus"></div>
     </div>
 
-    <!-- New section to add a member to the group -->
+    <!-- Section to add members (using batch function trustBatch) -->
     <div class="section" id="memberSection" style="display: none;">
-      <h2>Add Member</h2>
-      <label for="newMember">Member Address:</label>
-      <input type="text" id="newMember" placeholder="0x..." />
+      <h2>Add Member(s)</h2>
+      <label for="newMember">Member Address(es) (comma separated):</label>
+      <input type="text" id="newMember" placeholder="0x..., 0x..., ..." />
       <label for="newExpiry">Expiry (UNIX timestamp):</label>
-      <input type="number" id="newExpiry" placeholder="e.g. 1700000000" />
-      <button id="addMember">Add Member</button>
+      <!-- If left blank or invalid, a default expiry far in the future will be used -->
+      <input type="number" id="newExpiry" placeholder="Default: 9999999999" />
+      <button id="addMember">Add Member(s)</button>
       <div id="memberStatus"></div>
     </div>
   </div>
@@ -144,7 +146,8 @@
     // Global variables for provider, signer, and the group contract instance.
     let provider, signer, groupContract;
     
-    // ABI for the group contract with view functions, update functions, and the trust() function for adding members.
+    // ABI for the group contract.
+    // Note: This ABI now includes the trustBatch function.
     const groupABI = [
       "function owner() external view returns (address)",
       "function service() external view returns (address)",
@@ -157,7 +160,7 @@
       "function setRedemptionHandler(address _redemptionHandler) external",
       "function setMinimalDeposit(uint256 _minimalDeposit) external",
       "function setFeeCollection(address _feeCollection) external",
-      "function trust(address _trustReceiver, uint96 _expiry) external"
+      "function trustBatch(address[] memory _coreMembers, uint96 _expiry) external"
     ];
 
     // Initialize provider and signer using window.ethereum.
@@ -239,24 +242,29 @@
       }
     }
 
-    // Function to add a member using the trust() function.
-    async function addMember() {
+    // Function to add one or more members using the trustBatch() function.
+    async function addMembers() {
       if (!groupContract) return;
-      const newMember = document.getElementById("newMember").value.trim();
-      const newExpiry = document.getElementById("newExpiry").value.trim();
-      if (!ethers.utils.isAddress(newMember)) {
-        alert("Invalid member address.");
+      let inputStr = document.getElementById("newMember").value.trim();
+      if (!inputStr) {
+        alert("Please enter one or more member addresses.");
         return;
       }
-      if (!newExpiry || isNaN(newExpiry)) {
-        alert("Invalid expiry. Please enter a valid UNIX timestamp.");
+      // Split input by comma and remove any empty strings.
+      let addresses = inputStr.split(",").map(addr => addr.trim()).filter(addr => addr.length > 0);
+      if (addresses.length === 0) {
+        alert("No valid addresses entered.");
         return;
       }
+      // Get expiry; if missing or invalid, use a default far-future value.
+      let expiryInput = document.getElementById("newExpiry").value.trim();
+      let expiry = (!expiryInput || isNaN(expiryInput)) ? 9999999999 : Number(expiryInput);
+
       try {
-        const tx = await groupContract.trust(newMember, newExpiry);
+        const tx = await groupContract.trustBatch(addresses, expiry);
         document.getElementById("memberStatus").innerText = `Transaction submitted: ${tx.hash}`;
         await tx.wait();
-        document.getElementById("memberStatus").innerText = `Member added successfully! Tx hash: ${tx.hash}`;
+        document.getElementById("memberStatus").innerText = `Members added successfully! Tx hash: ${tx.hash}`;
       } catch (error) {
         console.error(error);
         document.getElementById("memberStatus").innerText = "Error: " + error.message;
@@ -309,7 +317,7 @@
           alert("Invalid fee collection address.");
         }
       });
-      document.getElementById("addMember").addEventListener("click", addMember);
+      document.getElementById("addMember").addEventListener("click", addMembers);
     });
   </script>
 </body>
