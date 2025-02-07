@@ -1,241 +1,201 @@
+
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Safe App Group Creator</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-      body {
-        font-family: sans-serif;
-        padding: 20px;
-        background: #333;
-        color: #fff;
-      }
-      h1 {
-        font-size: 24px;
-        margin-bottom: 20px;
-      }
-      form {
-        max-width: 500px;
-        background: #444;
-        padding: 20px;
-        border-radius: 8px;
-        margin-bottom: 20px;
-      }
-      label {
-        display: block;
-        margin-top: 10px;
-        font-weight: bold;
-      }
-      input,
-      textarea {
-        width: 100%;
-        padding: 8px;
-        margin-top: 5px;
-        box-sizing: border-box;
-        border: 1px solid #666;
-        border-radius: 4px;
-        background: #555;
-        color: #fff;
-      }
-      button {
-        margin-top: 20px;
-        padding: 10px 20px;
-        font-size: 16px;
-        background: #5c49e4;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        color: #fff;
-      }
-      button:hover {
-        background: #4a39cc;
-      }
-      #status {
-        margin-top: 20px;
-        font-size: 14px;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>Safe App Group Creator</h1>
-    <form id="groupForm">
-      <label for="service">Service Address:</label>
-      <!-- Prefilled with the zero address -->
-      <input
-        type="text"
-        id="service"
-        value="0x0000000000000000000000000000000000000000"
-        required
-      />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gnosis Safe Group Creator</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      padding: 0;
+      background: #f7f7f7;
+    }
+    h1 {
+      color: #333;
+    }
+    form {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 500px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #5C49E4;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #4A39CC;
+    }
+    #status {
+      margin-top: 20px;
+      font-size: 14px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gnosis Safe Group Creator</h1>
+  <form id="createGroupForm">
+    <label for="service">Service Address:</label>
+    <!-- Prefilled with the zero address -->
+    <input type="text" id="service" value="0x0000000000000000000000000000000000000000" required />
 
-      <label for="conditions">Initial Conditions (comma separated):</label>
-      <!-- Empty for no initial conditions -->
-      <textarea
-        id="conditions"
-        rows="2"
-        placeholder="Leave empty if none"
-      ></textarea>
+    <label for="conditions">Initial Conditions (comma separated):</label>
+    <!-- Leave empty for no initial conditions -->
+    <textarea id="conditions" rows="2" placeholder="Optional conditions (comma separated)"></textarea>
 
-      <label for="name">Group Name:</label>
-      <!-- Prefilled with "0" -->
-      <input type="text" id="name" value="0" required />
+    <label for="name">Group Name:</label>
+    <!-- Prefilled with "0" as the zero string value -->
+    <input type="text" id="name" value="0" required />
 
-      <label for="symbol">Symbol:</label>
-      <!-- Prefilled with "0" -->
-      <input type="text" id="symbol" value="0" required />
+    <label for="symbol">Symbol:</label>
+    <!-- Prefilled with "0" as the zero string value -->
+    <input type="text" id="symbol" value="0" required />
 
-      <label for="metadata">Metadata Digest (bytes32 hex):</label>
-      <!-- Prefilled with the 32-byte zero value -->
-      <input
-        type="text"
-        id="metadata"
-        value="0x0000000000000000000000000000000000000000000000000000000000000000"
-        required
-      />
+    <label for="metadata">Metadata Digest (bytes32 hex):</label>
+    <!-- Prefilled with the 32-byte zero value -->
+    <input type="text" id="metadata" value="0x0000000000000000000000000000000000000000000000000000000000000000" required />
 
-      <button type="submit">Create Group</button>
-    </form>
-    <div id="status"></div>
+    <button type="submit">Create Group</button>
+  </form>
+  <div id="status"></div>
 
-    <!-- Use module imports for Safe Apps Web3Modal and ethers.js -->
-    <script type="module">
-      // Import SafeAppWeb3Modal from unpkg and ethers from jsdelivr.
-      import { SafeAppWeb3Modal } from "https://unpkg.com/@safe-global/safe-apps-web3modal@latest/dist/index.esm.js";
-      import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.esm.min.js";
+  <script>
+    window.addEventListener('load', async () => {
+      // Check for an Ethereum provider (e.g., injected by Gnosis Safe or MetaMask)
+      if (typeof window.ethereum === 'undefined') {
+        document.getElementById('status').innerText =
+          "No Ethereum provider detected. Please use a Gnosis Safe or install MetaMask.";
+        return;
+      }
 
-      async function init() {
-        const statusDiv = document.getElementById("status");
-        // Instantiate the Safe Apps Web3Modal.
-        const modal = new SafeAppWeb3Modal();
-        let provider;
-        try {
-          // This call will automatically connect to the Safe provider if available.
-          provider = await modal.requestProvider();
-        } catch (error) {
-          statusDiv.innerText = "Error connecting to provider: " + error.message;
+      // Create an ethers provider and signer from the injected provider
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []); // Request account access if needed
+      const signer = provider.getSigner();
+
+      // The contract details
+      const contractAddress = "0x55785b41703728f1F1F05E77e22B13c3FCc9ce65";
+      const abi = [
+        {
+          "inputs": [],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            { "indexed": true, "internalType": "address", "name": "proxy", "type": "address" },
+            { "indexed": true, "internalType": "address", "name": "owner", "type": "address" },
+            { "indexed": true, "internalType": "address", "name": "mintHandler", "type": "address" },
+            { "indexed": false, "internalType": "address", "name": "redemptionHandler", "type": "address" }
+          ],
+          "name": "CMGroupCreated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            { "indexed": true, "internalType": "address", "name": "mastercopy", "type": "address" }
+          ],
+          "name": "MasterCopyDeployed",
+          "type": "event"
+        },
+        {
+          "inputs": [
+            { "internalType": "address", "name": "_service", "type": "address" },
+            { "internalType": "address[]", "name": "_initialConditions", "type": "address[]" },
+            { "internalType": "string", "name": "_name", "type": "string" },
+            { "internalType": "string", "name": "_symbol", "type": "string" },
+            { "internalType": "bytes32", "name": "_metadataDigest", "type": "bytes32" }
+          ],
+          "name": "createCMGroup",
+          "outputs": [
+            { "internalType": "address", "name": "", "type": "address" }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "masterCopyCMGroup",
+          "outputs": [
+            { "internalType": "contract CoreMembersGroup", "name": "", "type": "address" }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ];
+      
+      // Create a contract instance connected with the signer
+      const contract = new ethers.Contract(contractAddress, abi, signer);
+      
+      // Handle form submission
+      document.getElementById('createGroupForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        document.getElementById('status').innerText = "Submitting transaction...";
+        
+        // Retrieve values from the form fields
+        const service = document.getElementById('service').value.trim();
+        const conditionsInput = document.getElementById('conditions').value.trim();
+        const name = document.getElementById('name').value.trim();
+        const symbol = document.getElementById('symbol').value.trim();
+        const metadata = document.getElementById('metadata').value.trim();
+        
+        // Process initial conditions as an array (if provided)
+        let initialConditions = [];
+        if (conditionsInput.length > 0) {
+          initialConditions = conditionsInput.split(',')
+            .map(addr => addr.trim())
+            .filter(addr => addr.length > 0);
+        }
+        
+        // Validate metadata digest format (expecting "0x" followed by 64 hex characters)
+        if (!/^0x[0-9a-fA-F]{64}$/.test(metadata)) {
+          document.getElementById('status').innerText =
+            "Invalid metadata digest. It must be a 0x-prefixed 64-hex character string.";
           return;
         }
-
-        // Create an ethers.js provider and signer.
-        const ethersProvider = new ethers.providers.Web3Provider(provider);
-        const signer = ethersProvider.getSigner();
-
-        // Check if the app is loaded as a Safe App.
-        const isSafeApp = await modal.isSafeApp();
-        if (isSafeApp) {
-          statusDiv.innerText = "Connected as a Safe App.";
-        } else {
-          statusDiv.innerText = "Not loaded as a Safe App. Using fallback connection.";
+        
+        try {
+          // Call createCMGroup with the provided parameters
+          const tx = await contract.createCMGroup(service, initialConditions, name, symbol, metadata);
+          document.getElementById('status').innerText =
+            `Transaction submitted. Tx hash: ${tx.hash}. Waiting for confirmation...`;
+          
+          // Wait for the transaction to be mined
+          await tx.wait();
+          document.getElementById('status').innerText =
+            `Group created successfully! Tx hash: ${tx.hash}`;
+        } catch (error) {
+          console.error(error);
+          document.getElementById('status').innerText = `Error: ${error.message}`;
         }
-
-        // The target contract address and ABI.
-        const contractAddress = "0x55785b41703728f1F1F05E77e22B13c3FCc9ce65";
-        const abi = [
-          {
-            "inputs": [],
-            "stateMutability": "nonpayable",
-            "type": "constructor"
-          },
-          {
-            "anonymous": false,
-            "inputs": [
-              { "indexed": true, "internalType": "address", "name": "proxy", "type": "address" },
-              { "indexed": true, "internalType": "address", "name": "owner", "type": "address" },
-              { "indexed": true, "internalType": "address", "name": "mintHandler", "type": "address" },
-              { "indexed": false, "internalType": "address", "name": "redemptionHandler", "type": "address" }
-            ],
-            "name": "CMGroupCreated",
-            "type": "event"
-          },
-          {
-            "anonymous": false,
-            "inputs": [
-              { "indexed": true, "internalType": "address", "name": "mastercopy", "type": "address" }
-            ],
-            "name": "MasterCopyDeployed",
-            "type": "event"
-          },
-          {
-            "inputs": [
-              { "internalType": "address", "name": "_service", "type": "address" },
-              { "internalType": "address[]", "name": "_initialConditions", "type": "address[]" },
-              { "internalType": "string", "name": "_name", "type": "string" },
-              { "internalType": "string", "name": "_symbol", "type": "string" },
-              { "internalType": "bytes32", "name": "_metadataDigest", "type": "bytes32" }
-            ],
-            "name": "createCMGroup",
-            "outputs": [
-              { "internalType": "address", "name": "", "type": "address" }
-            ],
-            "stateMutability": "nonpayable",
-            "type": "function"
-          },
-          {
-            "inputs": [],
-            "name": "masterCopyCMGroup",
-            "outputs": [
-              { "internalType": "contract CoreMembersGroup", "name": "", "type": "address" }
-            ],
-            "stateMutability": "view",
-            "type": "function"
-          }
-        ];
-
-        // Create a contract instance.
-        const contract = new ethers.Contract(contractAddress, abi, signer);
-
-        // Handle the form submission.
-        document.getElementById("groupForm").addEventListener("submit", async (e) => {
-          e.preventDefault();
-          statusDiv.innerText = "Submitting transaction...";
-
-          // Get the values from the form.
-          const service = document.getElementById("service").value.trim();
-          const conditionsInput = document.getElementById("conditions").value.trim();
-          const name = document.getElementById("name").value.trim();
-          const symbol = document.getElementById("symbol").value.trim();
-          const metadata = document.getElementById("metadata").value.trim();
-
-          let initialConditions = [];
-          if (conditionsInput.length > 0) {
-            initialConditions = conditionsInput
-              .split(",")
-              .map(addr => addr.trim())
-              .filter(addr => addr);
-          }
-
-          // Validate that metadata is a 0x-prefixed 64-character hex string.
-          if (!/^0x[0-9a-fA-F]{64}$/.test(metadata)) {
-            statusDiv.innerText =
-              "Invalid metadata digest. Must be 0x followed by 64 hex characters.";
-            return;
-          }
-
-          try {
-            // Call createCMGroup on the contract.
-            const tx = await contract.createCMGroup(
-              service,
-              initialConditions,
-              name,
-              symbol,
-              metadata
-            );
-            statusDiv.innerText =
-              "Transaction submitted. Tx hash: " +
-              tx.hash +
-              "\nWaiting for confirmation...";
-            await tx.wait();
-            statusDiv.innerText =
-              "Group created successfully! Tx hash: " + tx.hash;
-          } catch (error) {
-            console.error(error);
-            statusDiv.innerText = "Error: " + error.message;
-          }
-        });
-      }
-
-      init();
-    </script>
-  </body>
+      });
+    });
+  </script>
+</body>
 </html>
