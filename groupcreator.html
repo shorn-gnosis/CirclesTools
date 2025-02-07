@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gnosis Safe Group Creator</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      padding: 0;
+      background: #f7f7f7;
+    }
+    h1 {
+      color: #333;
+    }
+    form {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 500px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #5C49E4;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #4A39CC;
+    }
+    #status {
+      margin-top: 20px;
+      font-size: 14px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gnosis Safe Group Creator</h1>
+  <form id="createGroupForm">
+    <label for="service">Service Address:</label>
+    <input type="text" id="service" placeholder="0x..." required />
+
+    <label for="conditions">Initial Conditions (comma separated addresses):</label>
+    <textarea id="conditions" rows="2" placeholder="0x..., 0x..., ..." ></textarea>
+
+    <label for="name">Group Name:</label>
+    <input type="text" id="name" placeholder="Enter group name" required />
+
+    <label for="symbol">Symbol:</label>
+    <input type="text" id="symbol" placeholder="Enter symbol" required />
+
+    <label for="metadata">Metadata Digest (bytes32 hex):</label>
+    <input type="text" id="metadata" placeholder="0x... (64 hex characters)" required />
+
+    <button type="submit">Create Group</button>
+  </form>
+  <div id="status"></div>
+
+  <script>
+    window.addEventListener('load', async () => {
+      // Check for an Ethereum provider (e.g. injected by Gnosis Safe or MetaMask)
+      if (typeof window.ethereum === 'undefined') {
+        document.getElementById('status').innerText = "No Ethereum provider detected. Please use a Gnosis Safe or install MetaMask.";
+        return;
+      }
+
+      // Create an ethers provider and signer from the injected provider
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []); // Request account access if needed
+      const signer = provider.getSigner();
+
+      // The contract details
+      const contractAddress = "0x55785b41703728f1F1F05E77e22B13c3FCc9ce65";
+      const abi = [
+        {
+          "inputs": [],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            { "indexed": true, "internalType": "address", "name": "proxy", "type": "address" },
+            { "indexed": true, "internalType": "address", "name": "owner", "type": "address" },
+            { "indexed": true, "internalType": "address", "name": "mintHandler", "type": "address" },
+            { "indexed": false, "internalType": "address", "name": "redemptionHandler", "type": "address" }
+          ],
+          "name": "CMGroupCreated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            { "indexed": true, "internalType": "address", "name": "mastercopy", "type": "address" }
+          ],
+          "name": "MasterCopyDeployed",
+          "type": "event"
+        },
+        {
+          "inputs": [
+            { "internalType": "address", "name": "_service", "type": "address" },
+            { "internalType": "address[]", "name": "_initialConditions", "type": "address[]" },
+            { "internalType": "string", "name": "_name", "type": "string" },
+            { "internalType": "string", "name": "_symbol", "type": "string" },
+            { "internalType": "bytes32", "name": "_metadataDigest", "type": "bytes32" }
+          ],
+          "name": "createCMGroup",
+          "outputs": [
+            { "internalType": "address", "name": "", "type": "address" }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "masterCopyCMGroup",
+          "outputs": [
+            { "internalType": "contract CoreMembersGroup", "name": "", "type": "address" }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ];
+      
+      // Create a contract instance connected with the signer
+      const contract = new ethers.Contract(contractAddress, abi, signer);
+      
+      // Handle form submission
+      document.getElementById('createGroupForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        document.getElementById('status').innerText = "Submitting transaction...";
+        
+        // Retrieve the values from the form fields
+        const service = document.getElementById('service').value.trim();
+        const conditionsInput = document.getElementById('conditions').value.trim();
+        const name = document.getElementById('name').value.trim();
+        const symbol = document.getElementById('symbol').value.trim();
+        const metadata = document.getElementById('metadata').value.trim();
+        
+        // Process initial conditions as an array (if provided)
+        let initialConditions = [];
+        if (conditionsInput.length > 0) {
+          initialConditions = conditionsInput.split(',')
+            .map(addr => addr.trim())
+            .filter(addr => addr.length > 0);
+        }
+        
+        // Validate metadata digest format (expecting "0x" followed by 64 hex characters)
+        if (!/^0x[0-9a-fA-F]{64}$/.test(metadata)) {
+          document.getElementById('status').innerText = "Invalid metadata digest. It must be a 0x-prefixed 64-hex character string.";
+          return;
+        }
+        
+        try {
+          // Call createCMGroup with the provided parameters
+          const tx = await contract.createCMGroup(service, initialConditions, name, symbol, metadata);
+          document.getElementById('status').innerText = `Transaction submitted. Tx hash: ${tx.hash}. Waiting for confirmation...`;
+          
+          // Wait for the transaction to be mined
+          await tx.wait();
+          document.getElementById('status').innerText = `Group created successfully! Tx hash: ${tx.hash}`;
+        } catch (error) {
+          console.error(error);
+          document.getElementById('status').innerText = `Error: ${error.message}`;
+        }
+      });
+    });
+  </script>
+</body>
+</html>
