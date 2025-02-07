@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Gnosis Safe Group Creator</title>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <title>Safe App Group Creator</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -56,22 +55,22 @@
   </style>
 </head>
 <body>
-  <h1>Gnosis Safe Group Creator</h1>
+  <h1>Safe App Group Creator</h1>
   <form id="createGroupForm">
     <label for="service">Service Address:</label>
     <!-- Prefilled with the zero address -->
     <input type="text" id="service" value="0x0000000000000000000000000000000000000000" required />
 
     <label for="conditions">Initial Conditions (comma separated):</label>
-    <!-- Leave empty for no initial conditions -->
+    <!-- Empty for no initial conditions -->
     <textarea id="conditions" rows="2" placeholder="Optional conditions (comma separated)"></textarea>
 
     <label for="name">Group Name:</label>
-    <!-- Prefilled with "0" as the zero string value -->
+    <!-- Prefilled with "0" -->
     <input type="text" id="name" value="0" required />
 
     <label for="symbol">Symbol:</label>
-    <!-- Prefilled with "0" as the zero string value -->
+    <!-- Prefilled with "0" -->
     <input type="text" id="symbol" value="0" required />
 
     <label for="metadata">Metadata Digest (bytes32 hex):</label>
@@ -82,21 +81,23 @@
   </form>
   <div id="status"></div>
 
-  <script>
-    window.addEventListener('load', async () => {
-      // Check for an Ethereum provider (e.g., injected by Gnosis Safe or MetaMask)
-      if (typeof window.ethereum === 'undefined') {
-        document.getElementById('status').innerText =
-          "No Ethereum provider detected. Please use a Gnosis Safe or install MetaMask.";
-        return;
-      }
+  <!-- Use module imports for Safe Apps Web3Modal and ethers.js -->
+  <script type="module">
+    // Import the Safe Apps Web3Modal wrapper and ethers.js.
+    // Note: We're importing from unpkg CDN. In production, consider bundling these packages.
+    import { SafeAppWeb3Modal } from 'https://unpkg.com/@safe-global/safe-apps-web3modal@latest/dist/index.esm.js';
+    import { ethers } from 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.esm.min.js';
 
-      // Create an ethers provider and signer from the injected provider
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      await provider.send("eth_requestAccounts", []); // Request account access if needed
-      const signer = provider.getSigner();
+    async function main() {
+      // Instantiate the SafeAppWeb3Modal. This wrapper will automatically detect if we're running as a Safe App.
+      const modal = new SafeAppWeb3Modal();
+      const provider = await modal.requestProvider();
+      
+      // Create an ethers provider and signer
+      const ethersProvider = new ethers.providers.Web3Provider(provider);
+      const signer = ethersProvider.getSigner();
 
-      // The contract details
+      // The target contract address (the one that creates groups)
       const contractAddress = "0x55785b41703728f1F1F05E77e22B13c3FCc9ce65";
       const abi = [
         {
@@ -149,7 +150,7 @@
         }
       ];
       
-      // Create a contract instance connected with the signer
+      // Create a contract instance using the signer
       const contract = new ethers.Contract(contractAddress, abi, signer);
       
       // Handle form submission
@@ -157,7 +158,7 @@
         event.preventDefault();
         document.getElementById('status').innerText = "Submitting transaction...";
         
-        // Retrieve values from the form fields
+        // Retrieve the form values
         const service = document.getElementById('service').value.trim();
         const conditionsInput = document.getElementById('conditions').value.trim();
         const name = document.getElementById('name').value.trim();
@@ -172,7 +173,7 @@
             .filter(addr => addr.length > 0);
         }
         
-        // Validate metadata digest format (expecting "0x" followed by 64 hex characters)
+        // Validate metadata digest format (should be "0x" followed by 64 hex characters)
         if (!/^0x[0-9a-fA-F]{64}$/.test(metadata)) {
           document.getElementById('status').innerText =
             "Invalid metadata digest. It must be a 0x-prefixed 64-hex character string.";
@@ -180,7 +181,7 @@
         }
         
         try {
-          // Call createCMGroup with the provided parameters
+          // Call the createCMGroup function with the provided parameters
           const tx = await contract.createCMGroup(service, initialConditions, name, symbol, metadata);
           document.getElementById('status').innerText =
             `Transaction submitted. Tx hash: ${tx.hash}. Waiting for confirmation...`;
@@ -194,7 +195,10 @@
           document.getElementById('status').innerText = `Error: ${error.message}`;
         }
       });
-    });
+    }
+
+    // Initialize the Safe App connection and contract interactions
+    main();
   </script>
 </body>
 </html>
