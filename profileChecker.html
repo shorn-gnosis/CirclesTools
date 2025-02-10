@@ -160,9 +160,48 @@
     // Initialize Helper Contract
     const helperContract = new ethers.Contract(helperAddress, helperABI, provider);
 
+    // Add these new functions at the start of the script
+    function getAddressFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('address');
+    }
+
+    function updateURLWithAddress(address) {
+        const url = new URL(window.location);
+        url.searchParams.set('address', address);
+        window.history.pushState({}, '', url);
+    }
+
+    // Modify the initialization code to check URL parameters on load
     const checkButton = document.getElementById("checkButton");
     const resultDiv = document.getElementById("result");
     const addressInput = document.getElementById("addressInput");
+
+    // Check URL parameters on page load
+    window.addEventListener('load', () => {
+        const urlAddress = getAddressFromURL();
+        if (urlAddress) {
+            addressInput.value = urlAddress;
+            checkAddress(urlAddress);
+        }
+    });
+
+    // Modify the click handler to update URL
+    checkButton.addEventListener("click", async () => {
+        const addr = addressInput.value.trim();
+        updateURLWithAddress(addr);
+        await checkAddress(addr);
+    });
+
+    // Update the address-link click handler to update URL
+    resultDiv.addEventListener("click", async (e) => {
+        if (e.target.classList.contains("address-link")) {
+            const addr = e.target.getAttribute("data-address");
+            addressInput.value = addr;
+            updateURLWithAddress(addr);
+            await checkAddress(addr);
+        }
+    });
 
     // ------------------------------
     // Modified helper function to fetch a profile name for an address.
@@ -334,7 +373,6 @@
         resultDiv.innerHTML = `<p style='color:red;'>Error: ${error.message}</p>`;
       }
     }
-
     checkButton.addEventListener("click", async () => {
       const addr = addressInput.value.trim();
       await checkAddress(addr);
