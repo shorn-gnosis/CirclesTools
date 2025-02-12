@@ -205,8 +205,8 @@
             Namespace: "V_CrcV2",
             Table: "GroupMemberships",
             Limit: 1000,
-            Columns: [],
-            Filter: [{
+            Columns: ["group"],
+            Filters: [{
               Column: "mint",
               Operator: "Equals",
               Value: address.toLowerCase()
