@@ -160,48 +160,9 @@
     // Initialize Helper Contract
     const helperContract = new ethers.Contract(helperAddress, helperABI, provider);
 
-    // Add these new functions at the start of the script
-    function getAddressFromURL() {
-        const params = new URLSearchParams(window.location.search);
-        return params.get('address');
-    }
-
-    function updateURLWithAddress(address) {
-        const url = new URL(window.location);
-        url.searchParams.set('address', address);
-        window.history.pushState({}, '', url);
-    }
-
-    // Modify the initialization code to check URL parameters on load
     const checkButton = document.getElementById("checkButton");
     const resultDiv = document.getElementById("result");
     const addressInput = document.getElementById("addressInput");
-
-    // Check URL parameters on page load
-    window.addEventListener('load', () => {
-        const urlAddress = getAddressFromURL();
-        if (urlAddress) {
-            addressInput.value = urlAddress;
-            checkAddress(urlAddress);
-        }
-    });
-
-    // Modify the click handler to update URL
-    checkButton.addEventListener("click", async () => {
-        const addr = addressInput.value.trim();
-        updateURLWithAddress(addr);
-        await checkAddress(addr);
-    });
-
-    // Update the address-link click handler to update URL
-    resultDiv.addEventListener("click", async (e) => {
-        if (e.target.classList.contains("address-link")) {
-            const addr = e.target.getAttribute("data-address");
-            addressInput.value = addr;
-            updateURLWithAddress(addr);
-            await checkAddress(addr);
-        }
-    });
 
     // ------------------------------
     // Modified helper function to fetch a profile name for an address.
@@ -230,6 +191,55 @@
       } catch (error) {
         console.error("Error fetching profile for", address, error);
         return "No name";
+      }
+    }
+
+    // Function to fetch groups that trust this address
+    async function fetchUserGroups(address) {
+      try {
+        const payload = {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "circles_query",
+          params: [{
+            Namespace: "V_CrcV2",
+            Table: "GroupMemberships",
+            Limit: 1000,
+            Columns: [],
+            Filter: [{
+              Column: "avatar",
+              Operator: "Equals",
+              Value: address.toLowerCase()
+            }],
+            Order: [
+              { Column: "blockNumber", SortOrder: "DESC" },
+              { Column: "transactionIndex", SortOrder: "DESC" },
+              { Column: "logIndex", SortOrder: "DESC" }
+            ]
+          }]
+        };
+
+        const response = await fetch('https://rpc.aboutcircles.com', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.error) {
+          throw new Error(data.error.message || 'RPC Error');
+        }
+
+        return data.result;
+      } catch (error) {
+        console.error('Error fetching groups:', error);
+        throw error;
       }
     }
 
@@ -306,6 +316,53 @@
           html += `<div class="info"><strong>[V2] CRC Amount:</strong> ${ethers.utils.formatUnits(v2Data.crcAmount, 18)}</div>`;
           html += `<div class="info"><strong>[V2] Last Mint:</strong> ${relativeTimeSince(v2Data.ts1)}</div>`;
           html += `<div class="info"><strong>[V2] Total Supply:</strong> ${ethers.utils.formatUnits(v2Data.totalSupply, 18)}</div>`;
+
+          // If this is a v2 human, fetch and display groups that trust them
+          if (v2Data.isHuman) {
+            try {
+              const groupsData = await fetchUserGroups(inputAddress);
+              if (groupsData && groupsData.Rows && groupsData.Rows.length > 0) {
+                html += `<div class="info"><strong>[V2] Groups that trust this human:</strong></div>`;
+                html += `
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Group Address</th>
+                        <th>Name</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                `;
+                
+                // Find the column indices
+                const groupAddressIndex = groupsData.Columns.indexOf('group');
+                const groupNameIndex = groupsData.Columns.indexOf('name');
+                
+                // Add each group to the table
+                for (const row of groupsData.Rows) {
+                  const groupAddress = row[groupAddressIndex];
+                  const groupName = row[groupNameIndex] || await getProfileName(groupAddress);
+                  
+                  html += `
+                    <tr>
+                      <td>
+                        <span class="address-link" data-address="${groupAddress}">
+                          ${groupAddress}
+                        </span>
+                      </td>
+                      <td>${groupName}</td>
+                    </tr>
+                  `;
+                }
+                html += `</tbody></table>`;
+              } else {
+                html += `<div class="info">[V2] No groups trust this human.</div>`;
+              }
+            } catch (error) {
+              console.error('Error fetching groups:', error);
+              html += `<div class="info" style="color: red;">[V2] Error loading groups: ${error.message}</div>`;
+            }
+          }
         }
 
         // ----- Trusted Addresses -----
@@ -373,6 +430,7 @@
         resultDiv.innerHTML = `<p style='color:red;'>Error: ${error.message}</p>`;
       }
     }
+
     checkButton.addEventListener("click", async () => {
       const addr = addressInput.value.trim();
       await checkAddress(addr);
