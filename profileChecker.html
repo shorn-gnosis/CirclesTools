@@ -146,80 +146,45 @@
   <!-- Ethers.js UMD build -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <script>
-    // Helper Contract ABI
+    /********************************************************
+     *  Contract ABIs and addresses
+     ********************************************************/
+    // 1) Helper contract to get the Circles v1 & v2 data
     const helperABI = [
       "function getAllDataForUser(address user) external view returns (tuple(bool isOrg, bool isHuman, uint256 totalSupply, bool stopped, uint256 lastTouched) v1Data, tuple(bool isHuman, bool isOrg, bool isGroup, uint256 crcAmount, uint256 ts1, uint256 ts2, uint256 totalSupply) v2Data, tuple(address trustedAddress, uint256 expiry, bool v1Org, bool v1Human, bool v2Human, bool v2Org, bool v2Group, uint256 v2TotalSupply, uint256 userHolds)[] trustedAddresses)"
     ];
-
-    // Helper Contract Address on Gnosis
     const helperAddress = "0xD5934724C19f9DbEeBC263066D627872e55e63Aa";
 
-    // Initialize Ethers.js Provider
+    // 2) Contract for "getAvatarsERC20(address[] calldata avatars)"
+    const avatarERC20ABI = [
+      "function getAvatarsERC20(address[] calldata avatars) external view returns (tuple(address staticERC20, address demurragedERC20)[] memory tokens)"
+    ];
+    const avatarERC20Address = "0xeBe64dd348d1204391f6617f632cF99Af0b75561";
+
+    // Ethers.js provider (Gnosis chain)
     const provider = new ethers.providers.JsonRpcProvider("https://rpc.ankr.com/gnosis");
 
-    // Initialize Helper Contract
+    // Contract instances
     const helperContract = new ethers.Contract(helperAddress, helperABI, provider);
+    const avatarERC20Contract = new ethers.Contract(avatarERC20Address, avatarERC20ABI, provider);
 
-    // Add these new functions at the start of the script
-    function getAddressFromURL() {
-        const params = new URLSearchParams(window.location.search);
-        return params.get('address');
-    }
-
-    function updateURLWithAddress(address) {
-        const url = new URL(window.location);
-        url.searchParams.set('address', address);
-        window.history.pushState({}, '', url);
-    }
-
-    // Modify the initialization code to check URL parameters on load
+    // Elements
     const checkButton = document.getElementById("checkButton");
     const resultDiv = document.getElementById("result");
     const addressInput = document.getElementById("addressInput");
 
-    // Check URL parameters on page load
-    window.addEventListener('load', () => {
-        const urlAddress = getAddressFromURL();
-        if (urlAddress) {
-            addressInput.value = urlAddress;
-            checkAddress(urlAddress);
-        }
-    });
-
-    // Modify the click handler to update URL
-    checkButton.addEventListener("click", async () => {
-        const addr = addressInput.value.trim();
-        updateURLWithAddress(addr);
-        await checkAddress(addr);
-    });
-
-    // Update the address-link click handler to update URL
-    resultDiv.addEventListener("click", async (e) => {
-        if (e.target.classList.contains("address-link")) {
-            const addr = e.target.getAttribute("data-address");
-            addressInput.value = addr;
-            updateURLWithAddress(addr);
-            await checkAddress(addr);
-        }
-    });
-
-    // ------------------------------
-    // Modified helper function to fetch a profile name for an address.
-    // This version expects the API to return an array with objects that contain a "name" property.
+    /********************************************************
+     *  Profile name lookup
+     ********************************************************/
     async function getProfileName(address) {
       try {
-        console.log("Fetching profile for address:", address);
         const queryAddress = address.toLowerCase();
         const url = `https://rpc.aboutcircles.com/profiles/search?address=${queryAddress}`;
-        console.log("Request URL:", url);
         const response = await fetch(url);
         if (!response.ok) {
-          console.error("HTTP error", response.status, response.statusText);
           return "No name";
         }
         const data = await response.json();
-        console.log("Profile response for", address, data);
-        // Check if data is an array and find the exact address match
         if (Array.isArray(data)) {
           const profile = data.find(entry => 
             entry.address.toLowerCase() === queryAddress
@@ -233,7 +198,60 @@
       }
     }
 
-    // Helper Functions for formatting
+    /********************************************************
+     *  Balancer price lookup (using returnAmount as Price)
+     ********************************************************/
+    async function getPrice(erc20Address) {
+      // If we don't have a valid address, skip
+      if (!erc20Address || erc20Address === ethers.constants.AddressZero) {
+        return "N/A";
+      }
+      try {
+        const query = `
+          {
+            sorGetSwapPaths(
+              chain: GNOSIS,
+              swapAmount: "1",
+              swapType: EXACT_IN,
+              tokenIn: "${erc20Address}",
+              tokenOut: "0xe91d153e0b41518a2ce8dd3d7944fa863463a97d"
+            ) {
+              returnAmount
+              effectivePrice
+              protocolVersion
+              effectivePriceReversed
+              priceImpact {
+                priceImpact
+                error
+              }
+            }
+          }
+        `;
+        const response = await fetch("https://api-v3.balancer.fi/graphql", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ query })
+        });
+        const data = await response.json();
+        if (
+          data.data &&
+          data.data.sorGetSwapPaths &&
+          data.data.sorGetSwapPaths.returnAmount
+        ) {
+          return data.data.sorGetSwapPaths.returnAmount;
+        }
+        return "N/A";
+      } catch (err) {
+        console.error("Error fetching price for", erc20Address, err);
+        return "N/A";
+      }
+    }
+
+    /********************************************************
+     *  Utility functions
+     ********************************************************/
     function relativeTimeSince(timestamp) {
       const now = Date.now();
       const diffMs = now - (timestamp * 1000);
@@ -260,8 +278,14 @@
       return date.toUTCString();
     }
 
+    /********************************************************
+     *  Main check function
+     ********************************************************/
     async function checkAddress(inputAddress) {
-      // Clear previous results
+      // Update the URL to include the current address
+      window.history.replaceState(null, "", "?address=" + inputAddress);
+
+      // Clear results
       resultDiv.innerHTML = "";
 
       if (!ethers.utils.isAddress(inputAddress)) {
@@ -278,19 +302,42 @@
       resultDiv.appendChild(loader);
 
       try {
-        // Fetch on-chain data via the helper contract
+        // 1) Get on-chain data for main user
         const data = await helperContract.getAllDataForUser(inputAddress);
-
-        // Remove loader
-        resultDiv.innerHTML = "";
-
         const v1Data = data.v1Data;
         const v2Data = data.v2Data;
         const trustedAddresses = data.trustedAddresses;
 
-        // Replace the main address with its profile name
+        // 2) Build a combined list of addresses (main + trusted)
+        const addressList = [inputAddress];
+        for (let i = 0; i < trustedAddresses.length; i++) {
+          addressList.push(trustedAddresses[i].trustedAddress);
+        }
+
+        // 3) Make a single call to getAvatarsERC20
+        //    Returns an array of structs with { staticERC20, demurragedERC20 }
+        const erc20Array = await avatarERC20Contract.getAvatarsERC20(addressList);
+
+        // 4) Build a map from address -> { staticERC20, demurragedERC20 }
+        const erc20Map = {};
+        addressList.forEach((addr, idx) => {
+          erc20Map[addr.toLowerCase()] = {
+            staticERC20: erc20Array[idx].staticERC20,
+            demurragedERC20: erc20Array[idx].demurragedERC20
+          };
+        });
+
+        // 5) Remove loader from DOM
+        resultDiv.innerHTML = "";
+
+        // ----- MAIN USER DISPLAY -----
         const mainDisplayName = await getProfileName(inputAddress);
+        const mainERC20Data = erc20Map[inputAddress.toLowerCase()] || { staticERC20: "", demurragedERC20: "" };
+        const mainDemurraged = mainERC20Data.demurragedERC20;
+        const mainPrice = await getPrice(mainDemurraged);
+
         let html = `<div class="info"><strong>Address:</strong> ${mainDisplayName}</div>`;
+        html += `<div class="info"><strong>Price:</strong> ${mainPrice}</div>`;
 
         // ----- V1 Info -----
         html += `<div class="info"><strong>[V1] Status:</strong> ${v1Data.isHuman ? 'human' : (v1Data.isOrg ? 'org' : 'none')}</div>`;
@@ -308,7 +355,7 @@
           html += `<div class="info"><strong>[V2] Total Supply:</strong> ${ethers.utils.formatUnits(v2Data.totalSupply, 18)}</div>`;
         }
 
-        // ----- Trusted Addresses -----
+        // ----- TRUSTED ADDRESSES TABLE -----
         if (trustedAddresses.length > 0) {
           html += `<div class="info"><strong>[V2] Trusted Addresses:</strong></div>`;
           html += `
@@ -317,31 +364,48 @@
                 <tr>
                   <th>Trusted Address</th>
                   <th>Name</th>
+                  <th>Price</th>
                   <th>Expiry</th>
                   <th>V1 State</th>
                   <th>V2 State</th>
                   <th>V2 Total Supply</th>
                   <th>User Holds</th>
+                  <th>ERC20 (demurraged)</th>
                 </tr>
               </thead>
               <tbody>
           `;
-          trustedAddresses.forEach(addrData => {
+          for (let i = 0; i < trustedAddresses.length; i++) {
+            const addrData = trustedAddresses[i];
+            let expiryValue;
+            if (i < trustedAddresses.length - 1) {
+              expiryValue = trustedAddresses[i + 1].expiry;
+            } else {
+              expiryValue = null;
+            }
+            const expiryDisplay = expiryValue ? formatExpiry(expiryValue) : "N/A";
+
             const v1State = addrData.v1Human ? 'human' : (addrData.v1Org ? 'org' : 'none');
             const v2State = addrData.v2Human ? 'human' : (addrData.v2Org ? 'org' : (addrData.v2Group ? 'group' : 'none'));
             const v2TotalSupply = addrData.v2TotalSupply !== 0 ? ethers.utils.formatUnits(addrData.v2TotalSupply, 18) : '-';
             const userHolds = ethers.utils.formatUnits(addrData.userHolds, 18);
-            const expiryDisplay = formatExpiry(addrData.expiry);
+            const trustedAddr = addrData.trustedAddress;
+            const demurragedERC20 = erc20Map[trustedAddr.toLowerCase()]?.demurragedERC20 || "";
 
             html += `
               <tr>
                 <td>
-                  <span class="address-link" data-address="${addrData.trustedAddress}">
-                    ${addrData.trustedAddress}
+                  <span class="address-link" data-address="${trustedAddr}">
+                    ${trustedAddr}
                   </span>
                 </td>
                 <td>
-                  <span class="address-name" data-address="${addrData.trustedAddress}">
+                  <span class="address-name" data-address="${trustedAddr}">
+                    Loading...
+                  </span>
+                </td>
+                <td>
+                  <span class="price" data-address="${trustedAddr}">
                     Loading...
                   </span>
                 </td>
@@ -350,38 +414,72 @@
                 <td>${v2State}</td>
                 <td>${v2TotalSupply}</td>
                 <td>${userHolds}</td>
+                <td>
+                  <span class="erc20" data-address="${trustedAddr}">
+                    ${demurragedERC20 || "N/A"}
+                  </span>
+                </td>
               </tr>
             `;
-          });
+          }
           html += `</tbody></table>`;
         } else {
           html += `<div class="info">[V2] No trusted addresses found.</div>`;
         }
 
-        // Update the result div
+        // Update the resultDiv with the built HTML
         resultDiv.innerHTML = html;
 
-        // --- Update each "Name" cell for trusted addresses ---
+        // ---- For each trusted address row, fetch & show name and price ----
         const nameCells = document.querySelectorAll(".address-name");
+        const priceCells = document.querySelectorAll(".price");
+
+        // Update profile names for trusted addresses
         for (const cell of nameCells) {
           const addr = cell.getAttribute("data-address");
           const profileName = await getProfileName(addr);
           cell.textContent = profileName;
+        }
+
+        // Update Price for trusted addresses
+        for (const cell of priceCells) {
+          const addr = cell.getAttribute("data-address");
+          const demurraged = erc20Map[addr.toLowerCase()]?.demurragedERC20;
+          if (!demurraged || demurraged === ethers.constants.AddressZero) {
+            cell.textContent = "N/A";
+          } else {
+            const retAmount = await getPrice(demurraged);
+            cell.textContent = retAmount;
+          }
         }
       } catch (error) {
         console.error(error);
         resultDiv.innerHTML = `<p style='color:red;'>Error: ${error.message}</p>`;
       }
     }
+
+    /********************************************************
+     *  Event listeners
+     ********************************************************/
     checkButton.addEventListener("click", async () => {
       const addr = addressInput.value.trim();
       await checkAddress(addr);
     });
 
-    // When clicking on a displayed address (raw address), re-check that address.
+    // Clicking on a raw address re-checks that address.
     resultDiv.addEventListener("click", async (e) => {
       if (e.target.classList.contains("address-link")) {
         const addr = e.target.getAttribute("data-address");
+        addressInput.value = addr;
+        await checkAddress(addr);
+      }
+    });
+
+    // On page load, check if the URL has an "address" parameter and load it.
+    window.addEventListener("load", async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const addr = urlParams.get("address");
+      if (addr && ethers.utils.isAddress(addr)) {
         addressInput.value = addr;
         await checkAddress(addr);
       }
