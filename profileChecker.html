@@ -28,9 +28,10 @@
       margin: 0.5rem 0 0;
       font-weight: 400;
     }
+    /* Reduced left margin for a more left-aligned layout */
     .container {
       max-width: 800px;
-      margin: 40px auto;
+      margin: 40px 0 40px 10px;
       padding: 0 20px;
     }
     label {
@@ -282,7 +283,7 @@
      *  Main check function
      ********************************************************/
     async function checkAddress(inputAddress) {
-      // Update the URL to include the current address
+      // Update the URL with the current address.
       window.history.replaceState(null, "", "?address=" + inputAddress);
 
       // Clear results
@@ -314,8 +315,7 @@
           addressList.push(trustedAddresses[i].trustedAddress);
         }
 
-        // 3) Make a single call to getAvatarsERC20
-        //    Returns an array of structs with { staticERC20, demurragedERC20 }
+        // 3) Make a single call to getAvatarsERC20.
         const erc20Array = await avatarERC20Contract.getAvatarsERC20(addressList);
 
         // 4) Build a map from address -> { staticERC20, demurragedERC20 }
@@ -337,23 +337,27 @@
         const mainPrice = await getPrice(mainDemurraged);
 
         let html = `<div class="info"><strong>Address:</strong> ${mainDisplayName}</div>`;
-        html += `<div class="info"><strong>Price:</strong> ${mainPrice}</div>`;
+        html += `<div class="info"><strong>CRC Price:</strong> ${mainPrice}</div>`;
 
         // ----- V1 Info -----
         html += `<div class="info"><strong>[V1] Status:</strong> ${v1Data.isHuman ? 'human' : (v1Data.isOrg ? 'org' : 'none')}</div>`;
         if (v1Data.isHuman) {
           html += `<div class="info"><strong>[V1] Total Supply:</strong> ${ethers.utils.formatUnits(v1Data.totalSupply, 18)}</div>`;
           html += `<div class="info"><strong>[V1] Stopped:</strong> ${v1Data.stopped}</div>`;
-          html += `<div class="info"><strong>[V1] Last Mint:</strong> ${new Date(v1Data.lastTouched * 1000).toLocaleString()}</div>`;
+          const lastMintV1 = v1Data.lastTouched == 0 ? "N/A" : new Date(v1Data.lastTouched * 1000).toLocaleString();
+          html += `<div class="info"><strong>[V1] Last Mint:</strong> ${lastMintV1}</div>`;
         }
 
         // ----- V2 Info -----
         html += `<div class="info"><strong>[V2] Status:</strong> ${v2Data.isHuman ? 'human' : (v2Data.isOrg ? 'org' : (v2Data.isGroup ? 'group' : 'none'))}</div>`;
         if (v2Data.isHuman || v2Data.isGroup) {
           html += `<div class="info"><strong>[V2] CRC Amount:</strong> ${ethers.utils.formatUnits(v2Data.crcAmount, 18)}</div>`;
-          html += `<div class="info"><strong>[V2] Last Mint:</strong> ${relativeTimeSince(v2Data.ts1)}</div>`;
+          const lastMintV2 = v2Data.ts1 == 0 ? "N/A" : relativeTimeSince(v2Data.ts1);
+          html += `<div class="info"><strong>[V2] Last Mint:</strong> ${lastMintV2}</div>`;
           html += `<div class="info"><strong>[V2] Total Supply:</strong> ${ethers.utils.formatUnits(v2Data.totalSupply, 18)}</div>`;
         }
+        // Add the ERC20 address back to the top (after V2 Total Supply)
+        html += `<div class="info"><strong>ERC20 (demurraged):</strong> ${mainDemurraged}</div>`;
 
         // ----- TRUSTED ADDRESSES TABLE -----
         if (trustedAddresses.length > 0) {
@@ -364,7 +368,7 @@
                 <tr>
                   <th>Trusted Address</th>
                   <th>Name</th>
-                  <th>Price</th>
+                  <th>CRC Price</th>
                   <th>Expiry</th>
                   <th>V1 State</th>
                   <th>V2 State</th>
